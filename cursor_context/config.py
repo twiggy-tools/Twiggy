@@ -1,5 +1,6 @@
 import yaml
 import os
+import fnmatch
 from pathlib import Path
 from typing import List, Set
 from importlib import resources
@@ -26,53 +27,83 @@ class Config:
     def exists(self) -> bool:
         return self.config_file.exists()
     
-    def create_default_config(self, custom_ignores: List[str] = None, sync_gitignore: bool = True, format_type: str = 'xml'):
+    def create_default_config(self, custom_ignores: List[str] = None, sync_gitignore: bool = True, format_type: str = 'xml',
+                               indexing_enabled: bool = True, indexing_include: List[str] = None, indexing_exclude: List[str] = None):
         custom_ignores = custom_ignores or []
-        
+        indexing_include = indexing_include or []
+        indexing_exclude = indexing_exclude or []
+
         try:
             template = resources.files('cursor_context').joinpath('templates/twiggy.yml.template').read_text(encoding='utf-8')
-        except FileNotFoundError:
+        except (FileNotFoundError, TypeError):
             template = (
                 "# Twiggy Configuration\n"
                 "# \n"
-                "# Twiggy generates real-time directory structure for Cursor AI\n"
-                "# Your AI always knows your codebase's structure automatically\n"
+                "# Twiggy generates real-time directory structure and codebase index for Cursor AI\n"
+                "# Your AI always knows your codebase's structure and API surface automatically\n"
                 "# https://github.com/twiggy-tools/Twiggy\n\n"
                 "# Custom folders/files to ignore (add your own here)\n"
                 "ignore:\n{ignore_list}\n\n"
                 "# Sync with .gitignore - automatically ignore anything in your .gitignore\n"
                 "syncWithGitignore: {sync_gitignore}\n\n"
                 "# Output format for directory structure\n"
-                "format: {format}\n"
+                "format: {format}\n\n"
+                "# Codebase Indexing - extracts function signatures, types, and exports\n"
+                "indexing:\n"
+                "  enabled: {indexing_enabled}\n"
+                "  include: {indexing_include}\n"
+                "  exclude:\n{indexing_exclude}\n"
             )
-        
+
         config_content = template.format(
             ignore_list=self._format_ignore_list(custom_ignores),
             sync_gitignore=str(sync_gitignore).lower(),
-            format=format_type
+            format=format_type,
+            indexing_enabled=str(indexing_enabled).lower(),
+            indexing_include=self._format_list_inline(indexing_include),
+            indexing_exclude=self._format_exclude_list(indexing_exclude)
         )
-        
+
         with open(self.config_file, 'w') as f:
             f.write(config_content)
     
     def _format_ignore_list(self, ignores: List[str]) -> str:
         if not ignores:
             return '  # - temp\n  # - src/old-stuff\n  # - docs/legacy/backup'
-        
+
         return '\n'.join(f'  - {ignore}' for ignore in ignores)
+
+    def _format_list_inline(self, items: List[str]) -> str:
+        """Format a list as inline YAML array"""
+        if not items:
+            return '[]'
+        return '[' + ', '.join(f'"{item}"' for item in items) + ']'
+
+    def _format_exclude_list(self, excludes: List[str]) -> str:
+        """Format exclude list with proper indentation"""
+        if not excludes:
+            return '    # - "*.example.ts"'
+        return '\n'.join(f'    - "{exclude}"' for exclude in excludes)
     
     def load(self) -> dict:
         if not self.exists():
             return {}
-        
+
         try:
             with open(self.config_file, 'r') as f:
                 config = yaml.safe_load(f) or {}
-            
+
+            indexing = config.get('indexing', {})
+
             return {
                 'ignores': config.get('ignore', []),
                 'syncWithGitignore': config.get('syncWithGitignore', True),
-                'format': config.get('format', 'xml')
+                'format': config.get('format', 'xml'),
+                'indexing': {
+                    'enabled': indexing.get('enabled', True),
+                    'include': indexing.get('include', []) or [],
+                    'exclude': indexing.get('exclude', []) or [],
+                }
             }
         except Exception:
             return {}
@@ -113,25 +144,141 @@ class Config:
     
     def should_ignore(self, path: Path) -> bool:
         ignores = self.get_ignores()
-        
+
         try:
             relative_path = path.relative_to(self.project_root)
             relative_path_str = str(relative_path).replace('\\', '/')
         except ValueError:
             relative_path_str = str(path).replace('\\', '/')
-        
+
         for ignore in ignores:
             ignore = ignore.replace('\\', '/')
-            
+
             if relative_path_str == ignore:
                 return True
-            
+
             if relative_path_str.startswith(ignore + '/'):
                 return True
-            
+
             if '/' not in ignore:
                 path_parts = relative_path_str.split('/')
                 if ignore in path_parts:
                     return True
-        
+
+        return False
+
+    def get_indexing_default_ignores(self) -> Set[str]:
+        """Default ignores specifically for the indexer"""
+        return {
+            # Test files
+            '*.test.ts', '*.test.tsx', '*.test.js', '*.test.jsx',
+            '*.spec.ts', '*.spec.tsx', '*.spec.js', '*.spec.jsx',
+            '__tests__', '__mocks__', 'test', 'tests',
+            '*.test.mjs', '*.test.cjs', '*.spec.mjs', '*.spec.cjs',
+
+            # Build outputs and dependencies
+            'node_modules', '.next', '.nuxt', 'dist', 'build', '.output',
+            '.vercel', '.netlify', 'out', '.cache', '.parcel-cache',
+            '.webpack', 'coverage', '.nyc_output', '.turbo',
+
+            # Config files
+            '*.config.ts', '*.config.js', '*.config.mjs', '*.config.cjs',
+            'vite.config.*', 'next.config.*', 'nuxt.config.*',
+            'tailwind.config.*', 'postcss.config.*', 'jest.config.*',
+            'vitest.config.*', 'webpack.config.*', 'rollup.config.*',
+            'babel.config.*', 'eslint.config.*', 'prettier.config.*',
+            'tsconfig.json', 'jsconfig.json', 'package.json',
+
+            # Declaration files (already type definitions)
+            '*.d.ts',
+
+            # Generated files
+            '*.generated.ts', '*.generated.js',
+            'generated', 'codegen', '.codegen',
+
+            # Storybook
+            '*.stories.ts', '*.stories.tsx', '*.stories.js', '*.stories.jsx',
+            '.storybook',
+
+            # E2E tests
+            'e2e', 'cypress', 'playwright',
+
+            # Scripts and tooling
+            'scripts', 'tools', 'bin',
+
+            # Migrations and seeds
+            'migrations', 'seeds', 'fixtures',
+
+            # Public assets
+            'public', 'static', 'assets',
+
+            # Version control and IDE
+            '.git', '.svn', '.hg', '.idea', '.vscode',
+
+            # Temporary files
+            'tmp', 'temp', '.tmp', '.temp',
+        }
+
+    def get_indexing_config(self) -> dict:
+        """Get indexing-specific configuration"""
+        config = self.load()
+        indexing = config.get('indexing', {})
+
+        return {
+            'enabled': indexing.get('enabled', True),
+            'include': indexing.get('include', []),
+            'exclude': indexing.get('exclude', []),
+        }
+
+    def should_index_file(self, path: Path) -> bool:
+        """Determine if a file should be indexed"""
+        indexing_config = self.get_indexing_config()
+
+        if not indexing_config['enabled']:
+            return False
+
+        try:
+            relative_path = path.relative_to(self.project_root)
+            relative_path_str = str(relative_path).replace('\\', '/')
+        except ValueError:
+            relative_path_str = str(path).replace('\\', '/')
+
+        filename = path.name
+
+        # Check against structure ignores first
+        if self.should_ignore(path):
+            return False
+
+        # Check against indexing-specific default ignores
+        default_ignores = self.get_indexing_default_ignores()
+        for ignore in default_ignores:
+            if self._matches_pattern(relative_path_str, filename, ignore):
+                return False
+
+        # Check against custom excludes
+        for exclude in indexing_config['exclude']:
+            if self._matches_pattern(relative_path_str, filename, exclude):
+                return False
+
+        # Check includes (if specified, only include matching files)
+        includes = indexing_config['include']
+        if includes:
+            return any(self._matches_pattern(relative_path_str, filename, inc) for inc in includes)
+
+        return True
+
+    def _matches_pattern(self, path: str, filename: str, pattern: str) -> bool:
+        """Check if path or filename matches a glob-like pattern"""
+        # Direct match
+        if fnmatch.fnmatch(path, pattern):
+            return True
+        if fnmatch.fnmatch(filename, pattern):
+            return True
+
+        # Check if pattern matches any path component
+        if '/' not in pattern and '*' not in pattern:
+            path_parts = path.split('/')
+            if pattern in path_parts:
+                return True
+
         return False

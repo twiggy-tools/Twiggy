@@ -18,6 +18,9 @@ setup(
         "watchdog>=3.0.0",
         "colorama>=0.4.0",
         "pyyaml>=6.0",
+        "tree-sitter>=0.23.0",
+        "tree-sitter-typescript>=0.23.0",
+        "tree-sitter-javascript>=0.23.0",
     ],
     entry_points={
         "console_scripts": [

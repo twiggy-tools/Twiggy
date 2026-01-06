@@ -2,16 +2,19 @@ from pathlib import Path
 
 
 def ensure_gitignore_entry(project_root):
-    """Add Twiggy rule file to .gitignore if not already present"""
+    """Add Twiggy rule files to .gitignore if not already present"""
     gitignore_path = project_root / '.gitignore'
-    entry = '.cursor/rules/file-structure.mdc'
-    
+    entries = [
+        '.cursor/rules/file-structure.mdc',
+        '.cursor/rules/codebase-index.mdc',
+    ]
+
     if gitignore_path.exists():
-        if _entry_exists(gitignore_path, entry):
-            return
-        _append_entry(gitignore_path, entry)
+        for entry in entries:
+            if not _entry_exists(gitignore_path, entry):
+                _append_entry(gitignore_path, entry)
     else:
-        _create_gitignore_with_entry(gitignore_path, entry)
+        _create_gitignore_with_entries(gitignore_path, entries)
 
 
 def _entry_exists(gitignore_path, entry):
@@ -24,6 +27,8 @@ def _append_entry(gitignore_path, entry):
         f.write(f'\n# Twiggy\n{entry}\n')
 
 
-def _create_gitignore_with_entry(gitignore_path, entry):
+def _create_gitignore_with_entries(gitignore_path, entries):
     with open(gitignore_path, 'w') as f:
-        f.write(f'# Twiggy\n{entry}\n')
+        f.write('# Twiggy\n')
+        for entry in entries:
+            f.write(f'{entry}\n')

@@ -1,0 +1,24 @@
+---
+alwaysApply: true
+---
+
+# {project_name} Codebase Index
+
+**This file provides an index of exported functions, types, interfaces, classes, and constants in your codebase.**
+
+Updated in real-time by Twiggy. Use this to discover existing utilities and avoid duplicating code.
+
+## How to Use
+
+When implementing new features:
+1. Check if similar functionality already exists
+2. Reuse existing types and utilities
+3. Understand the API surface of your codebase
+
+```typescript
+{index_content}
+```
+
+---
+
+*Generated and maintained by [Twiggy](https://github.com/twiggy-tools/Twiggy)*

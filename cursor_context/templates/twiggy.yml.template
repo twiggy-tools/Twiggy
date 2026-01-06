@@ -1,11 +1,11 @@
 # Twiggy Configuration
-# 
-# Twiggy generates real-time directory structure for Cursor AI
-# Your AI always knows your codebase's structure automatically
+#
+# Twiggy generates real-time directory structure and codebase index for Cursor AI
+# Your AI always knows your codebase's structure and API surface automatically
 # https://github.com/twiggy-tools/Twiggy
 #
-# This file controls what folders and files Twiggy ignores when generating directory structure
-# Note: The generated .cursor/rules/file-structure.mdc is not tracked in git by design
+# This file controls what folders and files Twiggy monitors and indexes
+# Note: Generated .cursor/rules/ files are not tracked in git by design
 
 # Custom folders/files to ignore (add your own here)
 # You can use folder names or full paths:
@@ -22,3 +22,20 @@ syncWithGitignore: {sync_gitignore}
 # tree: visual tree (├── └──)
 # xml: XML structure (better for LLMs)
 format: {format}
+
+# Codebase Indexing Configuration
+# Extracts function signatures, types, interfaces, classes, and exports
+# This helps AI understand what utilities and types exist in your codebase
+indexing:
+  # Enable/disable codebase indexing
+  enabled: {indexing_enabled}
+
+  # Include patterns (empty = index everything)
+  # Examples: ["src/**/*.ts", "lib/**/*.ts"]
+  include: {indexing_include}
+
+  # Exclude patterns (in addition to defaults)
+  # By default: test files, config files, build outputs, and node_modules are excluded
+  # Add your own patterns here:
+  exclude:
+{indexing_exclude}
