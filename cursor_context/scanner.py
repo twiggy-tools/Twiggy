@@ -95,7 +95,7 @@ class DirectoryScanner:
         project_name = self.project_root.name
         
         config = self.config.load()
-        format_type = config.get('format', 'xml')
+        format_type = config.get('structure', {}).get('format', 'xml')
         
         if format_type == 'xml':
             tree_content = self.generate_xml_structure(structure['items'])

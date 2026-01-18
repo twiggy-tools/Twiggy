@@ -18,17 +18,17 @@ def ensure_gitignore_entry(project_root):
 
 
 def _entry_exists(gitignore_path, entry):
-    with open(gitignore_path, 'r') as f:
+    with open(gitignore_path, 'r', encoding='utf-8') as f:
         return entry in f.read()
 
 
 def _append_entry(gitignore_path, entry):
-    with open(gitignore_path, 'a') as f:
+    with open(gitignore_path, 'a', encoding='utf-8') as f:
         f.write(f'\n# Twiggy\n{entry}\n')
 
 
 def _create_gitignore_with_entries(gitignore_path, entries):
-    with open(gitignore_path, 'w') as f:
+    with open(gitignore_path, 'w', encoding='utf-8') as f:
         f.write('# Twiggy\n')
         for entry in entries:
             f.write(f'{entry}\n')

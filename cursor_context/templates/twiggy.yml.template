@@ -7,21 +7,18 @@
 # This file controls what folders and files Twiggy monitors and indexes
 # Note: Generated .cursor/rules/ files are not tracked in git by design
 
-# Custom folders/files to ignore (add your own here)
-# You can use folder names or full paths:
-#   - temp                    # ignores any folder named "temp"
-#   - src/old-stuff          # ignores only "old-stuff" inside "src"
-#   - docs/legacy/backup     # ignores specific deep path
-ignore:
-{ignore_list}
-
-# Sync with .gitignore - automatically ignore anything in your .gitignore
+# Sync with .gitignore - automatically exclude anything in your .gitignore
 syncWithGitignore: {sync_gitignore}
 
-# Output format for directory structure
-# tree: visual tree (├── └──)
-# xml: XML structure (better for LLMs)
-format: {format}
+# File Structure Configuration
+structure:
+  # Output format: 'xml' (better for LLMs) or 'tree' (visual with ├── └──)
+  format: {format}
+
+  # Custom folders/files to exclude from structure generation
+  # Examples: 'temp', 'src/old-stuff', 'docs/legacy/backup'
+  exclude:
+{structure_exclude}
 
 # Codebase Indexing Configuration
 # Extracts function signatures, types, interfaces, classes, and exports

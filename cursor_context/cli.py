@@ -5,7 +5,7 @@ from .watcher import FileWatcher
 from .config import Config
 from .gitignore import ensure_gitignore_entry
 from .defaults import (
-    DEFAULT_SYNC_GITIGNORE, DEFAULT_FORMAT, DEFAULT_CUSTOM_IGNORES,
+    DEFAULT_SYNC_GITIGNORE, DEFAULT_FORMAT,
     DEFAULT_INDEXING_ENABLED, DEFAULT_INDEXING_INCLUDE, DEFAULT_INDEXING_EXCLUDE
 )
 from colorama import init, Fore, Style
@@ -18,9 +18,8 @@ def main():
     pass
 
 @main.command()
-@click.option('--config-only', is_flag=True, help='Only create config without scanning')
 @click.option('--defaults', is_flag=True, help='Use default settings without prompts')
-def init(config_only, defaults):
+def init(defaults):
     """Initialize Twiggy in the current directory"""
     current_dir = Path.cwd()
 
@@ -37,14 +36,7 @@ def init(config_only, defaults):
         else:
             _configure_settings(config)
 
-    if config_only:
-        click.echo(f"{Fore.GREEN}Configuration saved! Run 'twiggy run' to start monitoring.{Style.RESET_ALL}")
-        return
-
-    _generate_initial_outputs(config)
-
-    if click.confirm(f"{Fore.CYAN}Start watching for changes?{Style.RESET_ALL}"):
-        _start_file_watcher(config)
+    click.echo(f"{Fore.GREEN}Configuration saved! Run 'twiggy run' to start monitoring.{Style.RESET_ALL}")
 
 @main.command()
 def run():
@@ -54,6 +46,50 @@ def run():
         return
 
     _start_file_watcher(config)
+
+@main.command()
+def stats():
+    """Show codebase indexing size and time estimate"""
+    config = _get_validated_config()
+    if not config:
+        return
+
+    from .indexer import CodebaseIndexer
+
+    indexer = CodebaseIndexer(config)
+    files = indexer.get_indexable_files()
+    indexing_config = config.get_indexing_config()
+
+    click.echo(f"Indexable files: {len(files)}")
+    click.echo(f"Include patterns: {indexing_config.get('include') or []}")
+    click.echo(f"Exclude patterns: {indexing_config.get('exclude') or []}")
+
+    total_bytes = 0
+    size_entries = []
+    for file_path in files:
+        try:
+            size = file_path.stat().st_size
+        except OSError:
+            continue
+        total_bytes += size
+        size_entries.append((size, file_path))
+
+    click.echo(f"Total size: {_format_bytes(total_bytes)}")
+
+    estimate_bytes_per_sec = indexing_config.get("estimateBytesPerSec")
+    if estimate_bytes_per_sec and estimate_bytes_per_sec > 0:
+        estimate_seconds = total_bytes / estimate_bytes_per_sec
+        click.echo(
+            f"Estimated parse time: {estimate_seconds:.1f}s "
+            f"(assumes {_format_bytes(estimate_bytes_per_sec)}/s)"
+        )
+
+    if size_entries:
+        click.echo("Largest files:")
+        for size, file_path in sorted(size_entries, reverse=True)[:10]:
+            click.echo(
+                f"  {_format_bytes(size)}  {_safe_relative_path(file_path, config.project_root)}"
+            )
 
 
 def _setup_cursor_directory(project_root):
@@ -67,6 +103,24 @@ def _get_validated_config():
         click.echo(f"{Fore.RED}No config found. Run 'twiggy init' first.{Style.RESET_ALL}")
         return None
     return config
+
+
+def _format_bytes(value: int) -> str:
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(value)
+    for unit in units:
+        if size < 1024 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(size)} {unit}"
+            return f"{size:.2f} {unit}"
+        size /= 1024
+
+
+def _safe_relative_path(path: Path, root: Path) -> str:
+    try:
+        return str(path.relative_to(root)).replace("\\", "/")
+    except ValueError:
+        return str(path).replace("\\", "/")
 
 
 def _generate_initial_outputs(config):
@@ -87,7 +141,7 @@ def _configure_settings(config):
     """Configure all Twiggy settings including indexing"""
     click.echo(f"\n{Fore.YELLOW}Setting up Twiggy{Style.RESET_ALL}")
 
-    custom_ignores = _collect_custom_ignores()
+    structure_exclude = _collect_structure_excludes()
     sync_gitignore = _ask_gitignore_sync()
     format_type = _ask_output_format()
 
@@ -100,7 +154,7 @@ def _configure_settings(config):
         indexing_exclude = _ask_indexing_excludes()
 
     config.create_default_config(
-        custom_ignores,
+        structure_exclude,
         sync_gitignore,
         format_type,
         indexing_enabled,
@@ -109,31 +163,31 @@ def _configure_settings(config):
     )
 
     click.echo(f"\n{Fore.GREEN}Created twiggy.yml - you can edit this file later!{Style.RESET_ALL}")
-    if custom_ignores:
-        _display_added_ignores(custom_ignores)
+    if structure_exclude:
+        _display_added_excludes(structure_exclude)
 
 
-def _collect_custom_ignores():
-    custom_ignores = []
+def _collect_structure_excludes():
+    excludes = []
 
-    click.echo(f"\n{Fore.CYAN}Add custom folders to ignore (beyond the common defaults):{Style.RESET_ALL}")
+    click.echo(f"\n{Fore.CYAN}File Structure - Custom exclusions{Style.RESET_ALL}")
+    click.echo(f"{Fore.GREEN}Exclude folders/files from the directory structure output.{Style.RESET_ALL}")
     click.echo(f"{Fore.YELLOW}Examples: 'temp', 'src/old-stuff', 'docs/legacy/backup'{Style.RESET_ALL}")
-    click.echo(f"{Fore.GREEN}Note: We'll ask about .gitignore sync next, so don't add those manually{Style.RESET_ALL}")
-    click.echo(f"{Fore.GREEN}You can skip this and edit twiggy.yml later{Style.RESET_ALL}")
+    click.echo(f"{Fore.GREEN}Note: Common defaults (node_modules, .git, etc.) are already excluded{Style.RESET_ALL}")
     click.echo(f"{Fore.YELLOW}Just press Enter when done{Style.RESET_ALL}")
 
     while True:
-        folder = click.prompt(f"{Fore.MAGENTA}Folder name", default="", show_default=False).strip()
+        folder = click.prompt(f"{Fore.MAGENTA}Folder/file to exclude", default="", show_default=False).strip()
         if not folder:
             break
 
-        if folder not in custom_ignores:
-            custom_ignores.append(folder)
+        if folder not in excludes:
+            excludes.append(folder)
             click.echo(f"  {Fore.GREEN}Added: {folder}{Style.RESET_ALL}")
         else:
             click.echo(f"  {Fore.YELLOW}Already added: {folder}{Style.RESET_ALL}")
 
-    return custom_ignores
+    return excludes
 
 
 def _ask_gitignore_sync():
@@ -166,7 +220,7 @@ def _ask_indexing_excludes():
 
 def _create_default_config(config):
     config.create_default_config(
-        DEFAULT_CUSTOM_IGNORES,
+        [],  # structure_exclude - empty by default
         DEFAULT_SYNC_GITIGNORE,
         DEFAULT_FORMAT,
         DEFAULT_INDEXING_ENABLED,
@@ -176,10 +230,10 @@ def _create_default_config(config):
     click.echo(f"\n{Fore.GREEN}Created twiggy.yml with defaults - you can edit this file later!{Style.RESET_ALL}")
 
 
-def _display_added_ignores(custom_ignores):
-    click.echo(f"{Fore.CYAN}Custom ignores added:{Style.RESET_ALL}")
-    for ignore in custom_ignores:
-        click.echo(f"  - {ignore}")
+def _display_added_excludes(excludes):
+    click.echo(f"{Fore.CYAN}Structure exclusions added:{Style.RESET_ALL}")
+    for exclude in excludes:
+        click.echo(f"  - {exclude}")
 
 
 def _start_file_watcher(config):

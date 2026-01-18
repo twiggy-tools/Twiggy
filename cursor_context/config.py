@@ -4,6 +4,7 @@ import fnmatch
 from pathlib import Path
 from typing import List, Set
 from importlib import resources
+from .defaults import DEFAULT_INDEXING_ESTIMATE_BYTES_PER_SEC
 
 class Config:
     def __init__(self, project_root: Path):
@@ -27,9 +28,9 @@ class Config:
     def exists(self) -> bool:
         return self.config_file.exists()
     
-    def create_default_config(self, custom_ignores: List[str] = None, sync_gitignore: bool = True, format_type: str = 'xml',
+    def create_default_config(self, structure_exclude: List[str] = None, sync_gitignore: bool = True, format_type: str = 'xml',
                                indexing_enabled: bool = True, indexing_include: List[str] = None, indexing_exclude: List[str] = None):
-        custom_ignores = custom_ignores or []
+        structure_exclude = structure_exclude or []
         indexing_include = indexing_include or []
         indexing_exclude = indexing_exclude or []
 
@@ -42,12 +43,10 @@ class Config:
                 "# Twiggy generates real-time directory structure and codebase index for Cursor AI\n"
                 "# Your AI always knows your codebase's structure and API surface automatically\n"
                 "# https://github.com/twiggy-tools/Twiggy\n\n"
-                "# Custom folders/files to ignore (add your own here)\n"
-                "ignore:\n{ignore_list}\n\n"
-                "# Sync with .gitignore - automatically ignore anything in your .gitignore\n"
                 "syncWithGitignore: {sync_gitignore}\n\n"
-                "# Output format for directory structure\n"
-                "format: {format}\n\n"
+                "structure:\n"
+                "  format: {format}\n"
+                "  exclude:\n{structure_exclude}\n\n"
                 "# Codebase Indexing - extracts function signatures, types, and exports\n"
                 "indexing:\n"
                 "  enabled: {indexing_enabled}\n"
@@ -56,23 +55,17 @@ class Config:
             )
 
         config_content = template.format(
-            ignore_list=self._format_ignore_list(custom_ignores),
             sync_gitignore=str(sync_gitignore).lower(),
             format=format_type,
+            structure_exclude=self._format_exclude_list(structure_exclude),
             indexing_enabled=str(indexing_enabled).lower(),
             indexing_include=self._format_list_inline(indexing_include),
             indexing_exclude=self._format_exclude_list(indexing_exclude)
         )
 
-        with open(self.config_file, 'w') as f:
+        with open(self.config_file, 'w', encoding='utf-8') as f:
             f.write(config_content)
     
-    def _format_ignore_list(self, ignores: List[str]) -> str:
-        if not ignores:
-            return '  # - temp\n  # - src/old-stuff\n  # - docs/legacy/backup'
-
-        return '\n'.join(f'  - {ignore}' for ignore in ignores)
-
     def _format_list_inline(self, items: List[str]) -> str:
         """Format a list as inline YAML array"""
         if not items:
@@ -90,19 +83,25 @@ class Config:
             return {}
 
         try:
-            with open(self.config_file, 'r') as f:
+            with open(self.config_file, 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f) or {}
 
+            structure = config.get('structure', {})
             indexing = config.get('indexing', {})
 
             return {
-                'ignores': config.get('ignore', []),
                 'syncWithGitignore': config.get('syncWithGitignore', True),
-                'format': config.get('format', 'xml'),
+                'structure': {
+                    'format': structure.get('format', config.get('format', 'xml')),  # Fallback for old configs
+                    'exclude': structure.get('exclude', config.get('ignore', [])) or [],  # Fallback for old configs
+                },
                 'indexing': {
                     'enabled': indexing.get('enabled', True),
                     'include': indexing.get('include', []) or [],
                     'exclude': indexing.get('exclude', []) or [],
+                    'estimateBytesPerSec': indexing.get(
+                        'estimateBytesPerSec', DEFAULT_INDEXING_ESTIMATE_BYTES_PER_SEC
+                    ),
                 }
             }
         except Exception:
@@ -111,9 +110,9 @@ class Config:
     def get_ignores(self) -> Set[str]:
         config = self.load()
         all_ignores = set(self.get_default_ignores())
-        
-        custom_ignores = config.get('ignores', []) or []
-        all_ignores.update(custom_ignores)
+
+        structure_exclude = config.get('structure', {}).get('exclude', []) or []
+        all_ignores.update(structure_exclude)
         
         if config.get('syncWithGitignore', True):
             gitignore_patterns = self._load_gitignore()
@@ -228,6 +227,9 @@ class Config:
             'enabled': indexing.get('enabled', True),
             'include': indexing.get('include', []),
             'exclude': indexing.get('exclude', []),
+            'estimateBytesPerSec': indexing.get(
+                'estimateBytesPerSec', DEFAULT_INDEXING_ESTIMATE_BYTES_PER_SEC
+            ),
         }
 
     def should_index_file(self, path: Path) -> bool:

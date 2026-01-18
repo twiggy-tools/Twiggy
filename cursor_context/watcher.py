@@ -82,7 +82,7 @@ class CursorContextHandler(FileSystemEventHandler):
         except Exception as e:
             print(f"{Fore.RED}Error updating structure: {e}{Style.RESET_ALL}")
 
-    def update_index(self, event_type: str, path: str):
+    def update_index(self, event_type: str, path: str, src_path: str = None):
         """Update the codebase index output"""
         current_time = time.time()
 
@@ -92,7 +92,11 @@ class CursorContextHandler(FileSystemEventHandler):
         self.last_index_update = current_time
 
         try:
-            self.indexer.index_and_generate()
+            self.indexer.index_and_generate(
+                changed_path=Path(path),
+                event_type=event_type,
+                src_path=Path(src_path) if src_path else None,
+            )
             print(f"{Fore.BLUE}Updated index ({event_type}): {Path(path).name}{Style.RESET_ALL}")
         except Exception as e:
             print(f"{Fore.RED}Error updating index: {e}{Style.RESET_ALL}")
@@ -130,7 +134,7 @@ class CursorContextHandler(FileSystemEventHandler):
         if should_update_structure:
             self.update_structure("moved", event.dest_path)
         if should_update_index:
-            self.update_index("moved", event.dest_path)
+            self.update_index("moved", event.dest_path, event.src_path)
 
     def on_modified(self, event):
         if event.is_directory:

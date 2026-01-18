@@ -36,6 +36,7 @@ pip install -e .
 twiggy init              # setup in any project (interactive)
 twiggy init --defaults   # setup with defaults (no questions)
 twiggy watch             # start watching for changes
+twiggy stats             # show index size + estimate
 ```
 
 Creates `.cursor/rules/file-structure.mdc` that auto-updates when you add/remove files.
