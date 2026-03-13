@@ -3,6 +3,7 @@ Codebase Indexer - Extracts function signatures, types, classes, and exports fro
 Uses tree-sitter for AST-based parsing.
 """
 
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 from dataclasses import dataclass, field
@@ -487,6 +488,7 @@ class SkeletonGenerator:
     def __init__(self, config):
         self.config = config
         self.project_root = config.project_root
+        self.detail_level = "full"
         self.output_file = (
             self.project_root / ".cursor" / "rules" / "codebase-index.mdc"
         )
@@ -505,6 +507,7 @@ class SkeletonGenerator:
     def _build_content(self, file_indices: List[FileIndex]) -> str:
         """Build the full content for the output file"""
         project_name = self.project_root.name
+        self.detail_level = self.config.get_indexing_config().get("detailLevel", "full")
 
         try:
             template = (
@@ -577,11 +580,92 @@ class SkeletonGenerator:
 
     def _format_export(self, export: ExportedItem) -> str:
         """Format a single export item"""
+        if self.detail_level == "compact":
+            return self._format_compact_export(export)
+
         if export.kind in ["class", "interface", "enum"] and export.methods:
             method_lines = "\n".join(f"  {m}" for m in export.methods)
             return f"{export.signature} {{\n{method_lines}\n}}"
 
         return export.signature
+
+    def _format_compact_export(self, export: ExportedItem) -> str:
+        if export.kind == "function":
+            return self._compact_function_signature(export)
+
+        if export.kind == "type":
+            prefix, separator, _ = export.signature.partition("=")
+            if separator:
+                return f"{prefix.rstrip()} = ..."
+            return export.signature
+
+        if export.kind in ["class", "interface", "enum"]:
+            return f"{export.signature} {{ ... }}"
+
+        return self._compact_variable_signature(export.signature)
+
+    def _compact_function_signature(self, export: ExportedItem) -> str:
+        signature = export.signature
+        placeholder = self._get_compact_parameter_placeholder(signature, export.name)
+
+        if signature.startswith("export default function "):
+            return f"export default function {export.name}{placeholder}"
+
+        if signature.startswith("export function "):
+            return f"export function {export.name}{placeholder}"
+
+        prefix_match = re.match(
+            rf"^(export\s+(?:const|let|var)\s+{re.escape(export.name)}\s*=\s*)",
+            signature,
+        )
+        if not prefix_match:
+            return self._compact_variable_signature(signature)
+
+        prefix = prefix_match.group(1)
+        if "=>" in signature:
+            return f"{prefix}{placeholder} => ..."
+        if "= function" in signature:
+            return f"{prefix}function{placeholder}"
+        return f"{prefix}..."
+
+    def _get_compact_parameter_placeholder(self, signature: str, name: str) -> str:
+        name_index = signature.find(name)
+        if name_index == -1:
+            return "(...)"
+
+        open_paren = signature.find("(", name_index)
+        if open_paren == -1:
+            return "(...)"
+
+        close_paren = self._find_matching_paren(signature, open_paren)
+        if close_paren == -1:
+            return "(...)"
+
+        params = signature[open_paren + 1 : close_paren].strip()
+        if not params:
+            return "()"
+        if params.startswith("{"):
+            return "({...})"
+        if params.startswith("["):
+            return "([...])"
+        return "(...)"
+
+    def _find_matching_paren(self, value: str, open_index: int) -> int:
+        depth = 0
+        for index in range(open_index, len(value)):
+            if value[index] == "(":
+                depth += 1
+            elif value[index] == ")":
+                depth -= 1
+                if depth == 0:
+                    return index
+        return -1
+
+    def _compact_variable_signature(self, signature: str) -> str:
+        match = re.match(r"^(export\s+(?:const|let|var)\s+[A-Za-z_$][\w$]*)", signature)
+        if match:
+            return match.group(1)
+        return signature
 
     def _get_fallback_template(self) -> str:
         return (

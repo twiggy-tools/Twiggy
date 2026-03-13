@@ -43,6 +43,13 @@ Creates `.cursor/rules/file-structure.mdc` that auto-updates when you add/remove
 
 Ignores the usual stuff: `node_modules`, `__pycache__`, `.git`, `dist`, etc.
 
+If you want the codebase index to show compact export names instead of full signatures and members, set this in `twiggy.yml`:
+
+```yaml
+indexing:
+  detailLevel: compact
+```
+
 ## Design Decisions
 
 **Why track `twiggy.yml` but not the generated rule file?**

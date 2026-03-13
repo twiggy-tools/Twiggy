@@ -6,7 +6,8 @@ from .config import Config
 from .gitignore import ensure_gitignore_entry
 from .defaults import (
     DEFAULT_SYNC_GITIGNORE, DEFAULT_FORMAT,
-    DEFAULT_INDEXING_ENABLED, DEFAULT_INDEXING_INCLUDE, DEFAULT_INDEXING_EXCLUDE
+    DEFAULT_INDEXING_ENABLED, DEFAULT_INDEXING_INCLUDE, DEFAULT_INDEXING_EXCLUDE,
+    DEFAULT_INDEXING_DETAIL_LEVEL
 )
 from colorama import init, Fore, Style
 
@@ -149,6 +150,7 @@ def _configure_settings(config):
     indexing_enabled = _ask_indexing_enabled()
     indexing_include = []
     indexing_exclude = []
+    indexing_detail_level = DEFAULT_INDEXING_DETAIL_LEVEL
 
     if indexing_enabled:
         indexing_exclude = _ask_indexing_excludes()
@@ -159,7 +161,8 @@ def _configure_settings(config):
         format_type,
         indexing_enabled,
         indexing_include,
-        indexing_exclude
+        indexing_exclude,
+        indexing_detail_level
     )
 
     click.echo(f"\n{Fore.GREEN}Created twiggy.yml - you can edit this file later!{Style.RESET_ALL}")
@@ -225,7 +228,8 @@ def _create_default_config(config):
         DEFAULT_FORMAT,
         DEFAULT_INDEXING_ENABLED,
         DEFAULT_INDEXING_INCLUDE,
-        DEFAULT_INDEXING_EXCLUDE
+        DEFAULT_INDEXING_EXCLUDE,
+        DEFAULT_INDEXING_DETAIL_LEVEL
     )
     click.echo(f"\n{Fore.GREEN}Created twiggy.yml with defaults - you can edit this file later!{Style.RESET_ALL}")
 

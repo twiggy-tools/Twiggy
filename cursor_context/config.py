@@ -4,7 +4,10 @@ import fnmatch
 from pathlib import Path
 from typing import List, Set
 from importlib import resources
-from .defaults import DEFAULT_INDEXING_ESTIMATE_BYTES_PER_SEC
+from .defaults import (
+    DEFAULT_INDEXING_DETAIL_LEVEL,
+    DEFAULT_INDEXING_ESTIMATE_BYTES_PER_SEC,
+)
 
 class Config:
     def __init__(self, project_root: Path):
@@ -29,7 +32,8 @@ class Config:
         return self.config_file.exists()
     
     def create_default_config(self, structure_exclude: List[str] = None, sync_gitignore: bool = True, format_type: str = 'xml',
-                               indexing_enabled: bool = True, indexing_include: List[str] = None, indexing_exclude: List[str] = None):
+                               indexing_enabled: bool = True, indexing_include: List[str] = None, indexing_exclude: List[str] = None,
+                               indexing_detail_level: str = DEFAULT_INDEXING_DETAIL_LEVEL):
         structure_exclude = structure_exclude or []
         indexing_include = indexing_include or []
         indexing_exclude = indexing_exclude or []
@@ -52,6 +56,7 @@ class Config:
                 "  enabled: {indexing_enabled}\n"
                 "  include: {indexing_include}\n"
                 "  exclude:\n{indexing_exclude}\n"
+                "  detailLevel: {indexing_detail_level}\n"
             )
 
         config_content = template.format(
@@ -60,7 +65,8 @@ class Config:
             structure_exclude=self._format_exclude_list(structure_exclude),
             indexing_enabled=str(indexing_enabled).lower(),
             indexing_include=self._format_list_inline(indexing_include),
-            indexing_exclude=self._format_exclude_list(indexing_exclude)
+            indexing_exclude=self._format_exclude_list(indexing_exclude),
+            indexing_detail_level=self._normalize_indexing_detail_level(indexing_detail_level)
         )
 
         with open(self.config_file, 'w', encoding='utf-8') as f:
@@ -88,6 +94,9 @@ class Config:
 
             structure = config.get('structure', {})
             indexing = config.get('indexing', {})
+            detail_level = self._normalize_indexing_detail_level(
+                indexing.get('detailLevel', DEFAULT_INDEXING_DETAIL_LEVEL)
+            )
 
             return {
                 'syncWithGitignore': config.get('syncWithGitignore', True),
@@ -99,6 +108,7 @@ class Config:
                     'enabled': indexing.get('enabled', True),
                     'include': indexing.get('include', []) or [],
                     'exclude': indexing.get('exclude', []) or [],
+                    'detailLevel': detail_level,
                     'estimateBytesPerSec': indexing.get(
                         'estimateBytesPerSec', DEFAULT_INDEXING_ESTIMATE_BYTES_PER_SEC
                     ),
@@ -227,10 +237,18 @@ class Config:
             'enabled': indexing.get('enabled', True),
             'include': indexing.get('include', []),
             'exclude': indexing.get('exclude', []),
+            'detailLevel': self._normalize_indexing_detail_level(
+                indexing.get('detailLevel', DEFAULT_INDEXING_DETAIL_LEVEL)
+            ),
             'estimateBytesPerSec': indexing.get(
                 'estimateBytesPerSec', DEFAULT_INDEXING_ESTIMATE_BYTES_PER_SEC
             ),
         }
+
+    def _normalize_indexing_detail_level(self, detail_level: str) -> str:
+        if detail_level in {'full', 'compact'}:
+            return detail_level
+        return DEFAULT_INDEXING_DETAIL_LEVEL
 
     def should_index_file(self, path: Path) -> bool:
         """Determine if a file should be indexed"""

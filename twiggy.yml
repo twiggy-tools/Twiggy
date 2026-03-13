@@ -24,3 +24,9 @@ syncWithGitignore: true
 # tree: visual tree (├── └──)
 # xml: XML structure (better for LLMs)
 format: xml
+
+# Codebase indexing output detail
+# full: full signatures and members
+# compact: names with collapsed details
+indexing:
+  detailLevel: compact
